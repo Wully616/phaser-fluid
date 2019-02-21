@@ -29,6 +29,8 @@ export default class FluidGrid extends Phaser.GameObjects.GameObject {
         this.Vy = new Array(this.gridsize).fill(0);
         this.Vy0 = new Array(this.gridsize).fill(0);
 
+        this.idx = this.generateLookup(this.size); 
+        console.log
         this.graphics = this.scene.add.graphics();
         //grid size is size * size
         //this.grid = this.initaliseFluidGrid(this.size);
@@ -40,10 +42,9 @@ export default class FluidGrid extends Phaser.GameObjects.GameObject {
         scene.add.grid(width/2,height/2,width, height,blockSize,blockSize,0,255,200);
         
     }
-
-    initaliseFluidGrid(size){
+    generateLookup(size){
         //initialise our grid in a 1D array
-        var grid = [];
+        var grid = {};
 
         for(var i = 0; i < size * size; i++){
             var Vx = new Vector(0,0);
@@ -55,6 +56,18 @@ export default class FluidGrid extends Phaser.GameObjects.GameObject {
                 Vy: null,
                 Vy0: null
                 
+            }
+        }
+        return grid;
+    }
+    initaliseFluidGrid(size){
+        //initialise our grid in a 1D array
+        var grid = new Array(size);
+
+        for (var j = 1; j < N - 1; j++) {
+            grid[j] = new Array(size);
+            for (var i = 1; i < N - 1; i++) {
+                grid[j][i] = this.IX(j,i);
             }
         }
         return grid;
