@@ -4,7 +4,7 @@ import game from '../main/game.js'
 export default class SceneMain extends Phaser.Scene {
     constructor() {
         super({ key: "SceneMain" });
-        this.blocksize = 4;
+        this.blocksize = 8;
         
     }
 
@@ -14,7 +14,7 @@ export default class SceneMain extends Phaser.Scene {
 
     create(){
         this.text = this.add.text(10, 10, '', { fill: '#ff0000' }).setDepth(1);
-        this.fluid = new FluidGrid(this,0,0,"fluid",game.config.width,game.config.height,this.blocksize,0.00001,0.0,0.001);
+        this.fluid = new FluidGrid(this,0,0,"fluid",game.config.width,game.config.height,this.blocksize,0.0001,0.0000001,0.01);
         this.input.mouse.disableContextMenu();
 
         
@@ -63,16 +63,16 @@ export default class SceneMain extends Phaser.Scene {
         if(pointer.leftButtonDown()){          
             var gridX = Math.round(pointer.x / this.blocksize);
             var gridY = Math.round(pointer.y / this.blocksize);  
-            this.fluid.addDensity(gridX,gridY,100); 
-            this.fluid.addDensity(gridX+1,gridY,100); 
-            this.fluid.addDensity(gridX-1,gridY,100); 
-            this.fluid.addDensity(gridX,gridY+1,100); 
-            this.fluid.addDensity(gridX,gridY-1,100); 
+            this.fluid.addDensity(gridX,gridY,1000); 
+            this.fluid.addDensity(gridX+1,gridY,1000); 
+            this.fluid.addDensity(gridX-1,gridY,1000); 
+            this.fluid.addDensity(gridX,gridY+1,1000); 
+            this.fluid.addDensity(gridX,gridY-1,1000); 
 
-            this.fluid.addDensity(gridX+1,gridY+1,100); 
-            this.fluid.addDensity(gridX-1,gridY-1,100); 
-            this.fluid.addDensity(gridX-1,gridY+1,100); 
-            this.fluid.addDensity(gridX+1,gridY-1,100);
+            this.fluid.addDensity(gridX+1,gridY+1,1000); 
+            this.fluid.addDensity(gridX-1,gridY-1,1000); 
+            this.fluid.addDensity(gridX-1,gridY+1,1000); 
+            this.fluid.addDensity(gridX+1,gridY-1,1000);
 
         }
         if(pointer.rightButtonDown()){

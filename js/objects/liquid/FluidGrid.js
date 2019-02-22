@@ -13,7 +13,7 @@ export default class FluidGrid extends Phaser.GameObjects.GameObject {
         //a debug grid
         this.createDebugGrid(this.scene,this.gridWidth,this.gridHeight,this.blockSize);
         
-        this.iter = 16;
+        this.iter = 20;
         //size of the grid
         this.size = gridWidth/blockSize;
         this.gridsize = this.size*this.size;
@@ -85,15 +85,16 @@ export default class FluidGrid extends Phaser.GameObjects.GameObject {
         var s       = this.s;
         var density = this.density;
     
-        this.diffuse(1, Vx0, Vx, visc, dt, this.iter, N); // x
-        this.diffuse(2, Vy0, Vy, visc, dt, this.iter, N); // y
+        //this.diffuse(1, Vx0, Vx, visc, dt, this.iter, N); // x
+        //this.diffuse(2, Vy0, Vy, visc, dt, this.iter, N); // y
         
+        this.diffuseBoth(1, Vx0, Vx, 2, Vy0, Vy, visc, dt, this.iter, N );
         
         this.project(Vx0, Vy0, Vx, Vy, this.iter, N);
         
-        this.advect(1, Vx, Vx0, Vx0, Vy0,  dt, N); // x
-        this.advect(2, Vy, Vy0, Vx0, Vy0,  dt, N); // y
-        
+        //this.advect(1, Vx, Vx0, Vx0, Vy0,  dt, N); // x
+        //this.advect(2, Vy, Vy0, Vx0, Vy0,  dt, N); // y
+        this.advectBoth(1, Vx, Vx0, 2, Vy, Vy0, Vx0, Vy0,  dt, N); 
         
         this.project(Vx, Vy, Vx0, Vy0, this.iter, N);
         
@@ -104,9 +105,12 @@ export default class FluidGrid extends Phaser.GameObjects.GameObject {
     //type, oldvel, newvel, visc, timestep, iteration, size
     diffuse(b, x, x0, diff, dt, iter, N){
         var a = dt * diff * (N - 2) * (N - 2);
-        this.lin_solve(b, x, x0, a, 1 + 6 * a, iter, N);
+        this.lin_solve(b, x, x0, a, 1 + 4 * a, iter, N);
     }
-
+    diffuseBoth(bndsA, curA, prevA, bndsB, curB, prevB, diff, dt, iter, N){
+        var a = dt * diff * (N - 2) * (N - 2);
+        this.lin_solveBoth(bndsA,curA, prevA, bndsB, curB, prevB, a, 1 + 6 * a, iter, N);
+    }
 
 
     lin_solve(b, x, x0,  a,  c,  iter,  N){
@@ -114,53 +118,129 @@ export default class FluidGrid extends Phaser.GameObjects.GameObject {
         for (var k = 0; k < iter; k++) {     
             for (var j = 1; j < N - 1; j++) {
                 for (var i = 1; i < N - 1; i++) {
-                    x[this.IX(i, j)] =
-                        (x0[this.IX(i, j)]
-                            + a*(    x[this.IX(i+1, j   )]
-                                    +x[this.IX(i-1, j   )]
-                                    +x[this.IX(i  , j+1 )]
-                                    +x[this.IX(i  , j-1 )]
-                                    //+x[this.IX(i  , j   )] //do i need? would have been z -1
-                        )) * cRecip;
+                    var ix = this.IX(i, j);
+                    x[ ix ] = this.calcNeighborVal(ix ,x,x0,a, cRecip, N);                    
                 }
             }            
             this.set_bnd(b, x, N);
         }
     }
 
+    lin_solveBoth(b, x, x0, b2, y, y0,  a,  c,  iter,  N){
+        var cRecip = 1.0 / c;
+        for (var k = 0; k < iter; k++) {     
+            for (var j = 1; j < N - 1; j++) {
+                for (var i = 1; i < N - 1; i++) {
+                    var ix = this.IX(i, j);
+                    x[ ix ] = this.calcNeighborVal(ix ,x,x0,a, cRecip, N);     
+                    y[ ix ] = this.calcNeighborVal(ix ,y,y0,a, cRecip, N);                                           
+                }
+            }            
+            this.set_bndBoth(b, x, b2, y, N)
+        }
+    }
+
+    calcNeighborVal(ix ,x,x0,a, cRecip, N){
+        return (
+                x0[ix] + a *
+                (   x[ ix + 1 ] + //+ 1 on x axis
+                    x[ ix - 1 ] + //-1 on x axis
+                    x[ ix + N] + /// +1 on y axis
+                    x[ ix - N] // -1 on y axis
+                )
+            ) * cRecip;
+    }
+
     project(velocX, velocY, p, div, iter, N)
     {
-        
+        var nRecip = 1 / N;   
         for (var j = 1; j < N - 1; j++) {
             for (var i = 1; i < N - 1; i++) {
-                div[this.IX(i, j )] = -0.5*(
-                            velocX[this.IX(i+1, j    )]
-                            -velocX[this.IX(i-1, j    )]
-                            +velocY[this.IX(i  , j+1  )]
-                            -velocY[this.IX(i  , j-1  )]
-                    )/N;
-                p[this.IX(i, j )] = 0;
+                var ix = this.IX(i, j);
+                div[ ix ] = -0.5*(
+                            velocX[ ix + 1]
+                            -velocX[ ix -1 ]
+                            +velocY[ ix + N ]
+                            -velocY[ ix - N ]
+                ) * nRecip;
+                p[ ix ] = 0;
             }
         }
-        
-        this.set_bnd(0, div, N); 
-        this.set_bnd(0, p, N);
+    
+        this.set_bndBoth(0, div, 0, p, N)
         this.lin_solve(0, p, div, 1, 6, iter, N);
         
         
         for (var j = 1; j < N - 1; j++) {
             for (var i = 1; i < N - 1; i++) {
-                velocX[this.IX(i, j)] -= 0.5 * (  p[this.IX(i+1, j )]
-                                                -p[this.IX(i-1, j)]) * N;
-                velocY[this.IX(i, j)] -= 0.5 * (  p[this.IX(i, j+1)]
-                                                -p[this.IX(i, j-1)]) * N;
+                var ix = this.IX(i, j);
+                velocX[ ix ] -= 0.5 * (  p[ ix + 1 ] - p[ ix - 1 ]) * N;
+                velocY[ ix ] -= 0.5 * (  p[ ix + N ] - p[ ix - N ]) * N;
             }
         }
         
-        this.set_bnd(1, velocX, N);
-        this.set_bnd(2, velocY, N);
+        this.set_bndBoth(1, velocX, 2, velocX, N)
     }
 
+    //refactor
+    advectBoth(b, d, d0, b2, e, e0, velocX, velocY, dt, N)
+    {
+        var i0, i1, j0, j1;
+        
+        var dtx = dt * (N - 2);
+        var dty = dt * (N - 2);
+        
+        var s0, s1, t0, t1;
+        var tmp1, tmp2, x, y;
+        
+        var Nfloat = N;
+        var ifloat, jfloat;
+        var i, j;
+        
+
+        for(j = 1, jfloat = 1; j < N - 1; j++, jfloat++) { 
+            for(i = 1, ifloat = 1; i < N - 1; i++, ifloat++) {
+                tmp1 = dtx * velocX[this.IX(i, j)];
+                tmp2 = dty * velocY[this.IX(i, j)];
+
+                x    = ifloat - tmp1; 
+                y    = jfloat - tmp2;
+                
+                if(x < 0.5) x = 0.5; 
+                if(x > Nfloat + 0.5) x = Nfloat + 0.5; 
+                i0 = Math.floor(x); 
+                i1 = i0 + 1.0;
+                if(y < 0.5) y = 0.5; 
+                if(y > Nfloat + 0.5) y = Nfloat + 0.5; 
+                j0 = Math.floor(y);
+                j1 = j0 + 1.0; 
+                
+                s1 = x - i0; 
+                s0 = 1.0 - s1; 
+                t1 = y - j0; 
+                t0 = 1.0 - t1;
+                
+                var i0i = Math.floor(i0);
+                var i1i = Math.floor(i1);
+                var j0i = Math.floor(j0);
+                var j1i = Math.floor(j1);
+                
+                d[this.IX(i, j)] = 
+                
+                    s0 * ( t0 * d0[this.IX(i0i, j0i)]  +  t1 * d0[this.IX(i0i, j1i)] ) +
+                    s1 * ( t0 * d0[this.IX(i1i, j0i)]  +  t1 * d0[this.IX(i1i, j1i)] );
+                
+                e[this.IX(i, j)] = 
+                
+                    s0 * ( t0 * e0[this.IX(i0i, j0i)]  +  t1 * e0[this.IX(i0i, j1i)] ) +
+                    s1 * ( t0 * e0[this.IX(i1i, j0i)]  +  t1 * e0[this.IX(i1i, j1i)] );                    
+            }
+        }
+    
+        this.set_bndBoth(b, d, b2, e, N)
+    }
+
+    //refactor
     advect(b, d, d0,  velocX, velocY, dt, N)
     {
         var i0, i1, j0, j1;
@@ -213,25 +293,74 @@ export default class FluidGrid extends Phaser.GameObjects.GameObject {
         this.set_bnd(b, d, N);
     }
 
+    set_bndBoth(b, x, b2, y, N){
+
+        var ix;
+        for(var i = 1; i < N - 1; i++) {
+            ix = this.IX(i, 0  );
+            x[ ix ] = b == 2 ? -x[ ix + N] : x[ ix + N ];
+            y[ ix ] = b2 == 2 ? -y[ ix + N] : y[ ix + N ];
+
+            ix = this.IX(i, N-1);
+            x[ ix ] = b == 2 ? -x[ ix - N ] : x[ ix - N ];
+            y[ ix ] = b2 == 2 ? -y[ ix - N ] : y[ ix - N ];
+
+            ix = this.IX(0 , i);
+            x[ ix ] = b == 1 ? -x[ ix + 1 ] : x[ ix + 1 ];
+            y[ ix ] = b2 == 1 ? -y[ ix + 1 ] : y[ ix + 1 ];
+
+            ix = this.IX(N-1, i);            
+            x[ ix ] = b == 1 ? -x[ ix - 1] : x[ ix - 1];
+            y[ ix ] = b2 == 1 ? -y[ ix - 1] : y[ ix - 1];
+        }
+    
+        
+        ix = this.IX(0, 0);
+        x[ ix ] = 0.5 * ( x[ ix + 1]      + x[ ix + N ]       + x[ ix ] );
+        y[ ix ] = 0.5 * ( y[ ix + 1]      + y[ ix + N ]       + y[ ix ] );
+
+        ix = this.IX(0, N-1);
+        x[ ix ] = 0.5 * ( x[ ix + 1 - N ] + x[ ix - N ]       + x[ ix ]);
+        y[ ix ] = 0.5 * ( y[ ix + 1 - N ] + y[ ix - N ]       + y[ ix ]);
+
+        ix = this.IX(N-1, 0);
+        x[ ix ] = 0.5 * ( x[ ix - 1 ]     + x[ ix -1 + N ]    + x[ ix ]);
+        y[ ix ] = 0.5 * ( y[ ix - 1 ]     + y[ ix -1 + N ]    + y[ ix ]);
+
+        ix = this.IX(N-1, N-1);
+        x[ ix ] = 0.5 * ( x[ ix - 1 ]     + x[ ix - N ]       + x[ ix ]);
+        y[ ix ] = 0.5 * ( y[ ix - 1 ]     + y[ ix - N ]       + y[ ix ]);
+    }
+
     set_bnd(b, x, N){
 
-        
+        var ix;
         for(var i = 1; i < N - 1; i++) {
-            x[this.IX(i, 0  )] = b == 2 ? -x[this.IX(i, 1  )] : x[this.IX(i, 1  )];
-            x[this.IX(i, N-1)] = b == 2 ? -x[this.IX(i, N-2)] : x[this.IX(i, N-2)];
+            ix = this.IX(i, 0  );
+            x[ ix ] = b == 2 ? -x[ ix + N] : x[ ix + N ];
+
+            ix = this.IX(i, N-1);
+            x[ ix ] = b == 2 ? -x[ ix - N ] : x[ ix - N ];
+
+            ix = this.IX(0 , i);
+            x[ ix ] = b == 1 ? -x[ ix + 1 ] : x[ ix + 1 ];
+
+            ix = this.IX(N-1, i);            
+            x[ ix ] = b == 1 ? -x[ ix - 1] : x[ ix - 1];
         }
     
-    
-        for(var j = 1; j < N - 1; j++) {
-            x[this.IX(0  , j)] = b == 1 ? -x[this.IX(1  , j)] : x[this.IX(1  , j)];
-            x[this.IX(N-1, j)] = b == 1 ? -x[this.IX(N-2, j)] : x[this.IX(N-2, j)];
-        }
         
-        
-        x[this.IX(0, 0)]     = 0.5 * (x[this.IX(1, 0)]     + x[this.IX(0, 1)]     + x[this.IX(0, 0)]);
-        x[this.IX(0, N-1)]   = 0.5 * (x[this.IX(1, N-1)]   + x[this.IX(0, N-2)]   + x[this.IX(0, N-1)]);
-        x[this.IX(N-1, 0)]   = 0.5 * (x[this.IX(N-2, 0)]   + x[this.IX(N-1, 1)]   + x[this.IX(N-1, 0)]);
-        x[this.IX(N-1, N-1)] = 0.5 * (x[this.IX(N-2, N-1)] + x[this.IX(N-1, N-2)] + x[this.IX(N-1, N-1)]);
+        ix = this.IX(0, 0);
+        x[ ix ] = 0.333 * ( x[ ix + 1]      + x[ ix + N ]       + x[ ix ] );
+
+        ix = this.IX(0, N-1);
+        x[ ix ] = 0.333 * ( x[ ix + 1 - N ] + x[ ix - N ]       + x[ ix ]);
+
+        ix = this.IX(N-1, 0);
+        x[ ix ] = 0.333 * ( x[ ix - 1 ]     + x[ ix -1 + N ]    + x[ ix ]);
+
+        ix = this.IX(N-1, N-1);
+        x[ ix ] = 0.333 * ( x[ ix - 1 ]     + x[ ix - N ]       + x[ ix ]);
     }
 
     addDensity(x, y, amount){
@@ -276,7 +405,7 @@ export default class FluidGrid extends Phaser.GameObjects.GameObject {
                 if(d > 255){
                     d = 255;
                 }
-                var color = Phaser.Display.Color.GetColor(d,0,0);
+                var color = Phaser.Display.Color.GetColor(d,d,0);
                 this.graphics.fillStyle(color);
                 this.graphics.fillRect(x, y, this.blockSize, this.blockSize);
                 

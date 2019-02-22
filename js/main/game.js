@@ -3,8 +3,8 @@ import SceneMain from '../scene/SceneMain.js'
 
 var config = {
     type: Phaser.WEBGL,
-    width: 800,
-    height: 800,
+    width: 512,
+    height: 512,
     
     physics: {
         default: "arcade",
