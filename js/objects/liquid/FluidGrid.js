@@ -22,8 +22,12 @@ export default class FluidGrid extends Phaser.GameObjects.GameObject {
         this.dt = dt;
         this.diff = diffusion;
         this.visc = viscosity;
-        this.s = new Array(this.gridsize).fill(0);
-        this.density = new Array(this.gridsize).fill(0);
+        this.sR = new Array(this.gridsize).fill(0);
+        this.sG = new Array(this.gridsize).fill(0);
+        this.sB = new Array(this.gridsize).fill(0);
+        this.densityR = new Array(this.gridsize).fill(0);
+        this.densityG = new Array(this.gridsize).fill(0);
+        this.densityB = new Array(this.gridsize).fill(0);
         this.Vx = new Array(this.gridsize).fill(0);
         this.Vx0 = new Array(this.gridsize).fill(0);
         this.Vy = new Array(this.gridsize).fill(0);
@@ -82,24 +86,31 @@ export default class FluidGrid extends Phaser.GameObjects.GameObject {
         var Vy      = this.Vy;
         var Vx0     = this.Vx0;
         var Vy0     = this.Vy0;
-        var s       = this.s;
-        var density = this.density;
+        var sR       = this.sR;
+        var sG       = this.sG;
+        var sB       = this.sB;
+        var densityR = this.densityR;
+        var densityG = this.densityG;
+        var densityB = this.densityB;
     
         //this.diffuse(1, Vx0, Vx, visc, dt, this.iter, N); // x
         //this.diffuse(2, Vy0, Vy, visc, dt, this.iter, N); // y
         
-        this.diffuseBoth(1, Vx0, Vx, 2, Vy0, Vy, visc, dt, this.iter, N );
+        this.diffuseVec(1, Vx0, Vx, 2, Vy0, Vy, visc, dt, this.iter, N );
         
         this.project(Vx0, Vy0, Vx, Vy, this.iter, N);
         
         //this.advect(1, Vx, Vx0, Vx0, Vy0,  dt, N); // x
         //this.advect(2, Vy, Vy0, Vx0, Vy0,  dt, N); // y
-        this.advectBoth(1, Vx, Vx0, 2, Vy, Vy0, Vx0, Vy0,  dt, N); 
+        this.advectVec(1, Vx, Vx0, 2, Vy, Vy0, Vx0, Vy0,  dt, N); 
         
         this.project(Vx, Vy, Vx0, Vy0, this.iter, N);
         
-        this.diffuse(0, s, density, diff, dt, this.iter, N);
-        this.advect(0, density, s, Vx, Vy, dt, N);
+        //process R G B channels of density
+        this.diffuseRGB(0, [sR,sG,sB], [densityR,densityG,densityB], diff, dt, this.iter, N);
+        this.advectRGB(0, [densityR,densityG,densityB], [sR,sG,sB], Vx, Vy, dt, N);
+
+  
     }
 
     //type, oldvel, newvel, visc, timestep, iteration, size
@@ -107,11 +118,14 @@ export default class FluidGrid extends Phaser.GameObjects.GameObject {
         var a = dt * diff * (N - 2) * (N - 2);
         this.lin_solve(b, x, x0, a, 1 + 4 * a, iter, N);
     }
-    diffuseBoth(bndsA, curA, prevA, bndsB, curB, prevB, diff, dt, iter, N){
+    diffuseVec(bndsA, curA, prevA, bndsB, curB, prevB, diff, dt, iter, N){
         var a = dt * diff * (N - 2) * (N - 2);
-        this.lin_solveBoth(bndsA,curA, prevA, bndsB, curB, prevB, a, 1 + 6 * a, iter, N);
+        this.lin_solveVec(bndsA,curA, prevA, bndsB, curB, prevB, a, 1 + 6 * a, iter, N);
     }
-
+    diffuseRGB(b, x, x0, diff, dt, iter, N){
+        var a = dt * diff * (N - 2) * (N - 2);
+        this.lin_solveRGB(b, x, x0, a, 1 + 4 * a, iter, N);
+    }
 
     lin_solve(b, x, x0,  a,  c,  iter,  N){
         var cRecip = 1.0 / c;
@@ -125,8 +139,26 @@ export default class FluidGrid extends Phaser.GameObjects.GameObject {
             this.set_bnd(b, x, N);
         }
     }
+    lin_solveRGB(b, x, x0,  a,  c,  iter,  N){
+        var cRecip = 1.0 / c;
+        for (var k = 0; k < iter; k++) {     
+            for (var j = 1; j < N - 1; j++) {
+                for (var i = 1; i < N - 1; i++) {
+                    var ix = this.IX(i, j);
+                    x[0][ ix ] = this.calcNeighborVal(ix ,x[0],x0[0],a, cRecip, N); //r
+                    x[1][ ix ] = this.calcNeighborVal(ix ,x[1],x0[1],a, cRecip, N); //g
+                    x[2][ ix ] = this.calcNeighborVal(ix ,x[2],x0[2],a, cRecip, N); //b
 
-    lin_solveBoth(b, x, x0, b2, y, y0,  a,  c,  iter,  N){
+                }
+            }      
+            
+            this.set_bnd(b, x[0], N);
+            this.set_bnd(b, x[1], N);
+            this.set_bnd(b, x[2], N);
+            
+        }
+    }
+    lin_solveVec(b, x, x0, b2, y, y0,  a,  c,  iter,  N){
         var cRecip = 1.0 / c;
         for (var k = 0; k < iter; k++) {     
             for (var j = 1; j < N - 1; j++) {
@@ -136,7 +168,7 @@ export default class FluidGrid extends Phaser.GameObjects.GameObject {
                     y[ ix ] = this.calcNeighborVal(ix ,y,y0,a, cRecip, N);                                           
                 }
             }            
-            this.set_bndBoth(b, x, b2, y, N)
+            this.set_bndVec(b, x, b2, y, N)
         }
     }
 
@@ -167,7 +199,7 @@ export default class FluidGrid extends Phaser.GameObjects.GameObject {
             }
         }
     
-        this.set_bndBoth(0, div, 0, p, N)
+        this.set_bndVec(0, div, 0, p, N)
         this.lin_solve(0, p, div, 1, 6, iter, N);
         
         
@@ -179,11 +211,11 @@ export default class FluidGrid extends Phaser.GameObjects.GameObject {
             }
         }
         
-        this.set_bndBoth(1, velocX, 2, velocX, N)
+        this.set_bndVec(1, velocX, 2, velocX, N)
     }
 
     //refactor
-    advectBoth(b, d, d0, b2, e, e0, velocX, velocY, dt, N)
+    advectVec(b, d, d0, b2, e, e0, velocX, velocY, dt, N)
     {
         var i0, i1, j0, j1;
         
@@ -237,7 +269,7 @@ export default class FluidGrid extends Phaser.GameObjects.GameObject {
             }
         }
     
-        this.set_bndBoth(b, d, b2, e, N)
+        this.set_bndVec(b, d, b2, e, N)
     }
 
     //refactor
@@ -292,8 +324,61 @@ export default class FluidGrid extends Phaser.GameObjects.GameObject {
     
         this.set_bnd(b, d, N);
     }
+    advectRGB(b, d, d0,  velocX, velocY, dt, N)
+    {
+        var i0, i1, j0, j1;
+        
+        var dtx = dt * (N - 2);
+        var dty = dt * (N - 2);
+        
+        var s0, s1, t0, t1;
+        var tmp1, tmp2, x, y;
+        
+        var Nfloat = N;
+        var ifloat, jfloat;
+        var i, j;
+        
 
-    set_bndBoth(b, x, b2, y, N){
+        for(j = 1, jfloat = 1; j < N - 1; j++, jfloat++) { 
+            for(i = 1, ifloat = 1; i < N - 1; i++, ifloat++) {
+                tmp1 = dtx * velocX[this.IX(i, j)];
+                tmp2 = dty * velocY[this.IX(i, j)];
+
+                x    = ifloat - tmp1; 
+                y    = jfloat - tmp2;
+                
+                if(x < 0.5) x = 0.5; 
+                if(x > Nfloat + 0.5) x = Nfloat + 0.5; 
+                i0 = Math.floor(x); 
+                i1 = i0 + 1.0;
+                if(y < 0.5) y = 0.5; 
+                if(y > Nfloat + 0.5) y = Nfloat + 0.5; 
+                j0 = Math.floor(y);
+                j1 = j0 + 1.0; 
+                
+                s1 = x - i0; 
+                s0 = 1.0 - s1; 
+                t1 = y - j0; 
+                t0 = 1.0 - t1;
+                
+                var i0i = Math.floor(i0);
+                var i1i = Math.floor(i1);
+                var j0i = Math.floor(j0);
+                var j1i = Math.floor(j1);
+                
+                for(var den = 0; den < d.length; den++){
+                    d[den][this.IX(i, j)] = 
+                    
+                        s0 * ( t0 * d0[den][this.IX(i0i, j0i)]  +  t1 * d0[den][this.IX(i0i, j1i)] ) +
+                        s1 * ( t0 * d0[den][this.IX(i1i, j0i)]  +  t1 * d0[den][this.IX(i1i, j1i)] );
+                }
+            }
+        }
+        for(var den = 0; den < d.length; den++){
+            this.set_bnd(b, d[den], N);
+        }
+    }
+    set_bndVec(b, x, b2, y, N){
 
         var ix;
         for(var i = 1; i < N - 1; i++) {
@@ -363,6 +448,30 @@ export default class FluidGrid extends Phaser.GameObjects.GameObject {
         x[ ix ] = 0.333 * ( x[ ix - 1 ]     + x[ ix - N ]       + x[ ix ]);
     }
 
+    addItem(x,y,type,amount){
+        var ix = this.IX(x,y);
+        if(type == "red"){
+            this.densityR[ ix ] += amount;
+            this.densityR[ ix + 1 ] += amount;
+            this.densityR[ ix - 1 ] += amount;
+            this.densityR[ ix + this.size ] += amount;
+            this.densityR[ ix - this.size ] += amount;
+        }
+        if(type == "green"){
+            this.densityG[ ix ] += amount;
+            this.densityG[ ix + 1 ] += amount;
+            this.densityG[ ix - 1 ] += amount;
+            this.densityG[ ix + this.size ] += amount;
+            this.densityG[ ix - this.size ] += amount;
+        }
+        if(type == "blue"){
+            this.densityB[ ix ] += amount;
+            this.densityB[ ix + 1 ] += amount;
+            this.densityB[ ix - 1 ] += amount;
+            this.densityB[ ix + this.size ] += amount;
+            this.densityB[ ix - this.size ] += amount;
+        }
+    }
     addDensity(x, y, amount){
         this.density[ this.IX(x,y) ] += amount;
         
@@ -373,8 +482,11 @@ export default class FluidGrid extends Phaser.GameObjects.GameObject {
     }
 
     getDensity(x,y){
-        return this.density[ this.IX(x,y) ];
+        return this.densityR[ this.IX(x,y) ]+','+
+                this.densityG[ this.IX(x,y) ]+','+
+                this.densityB[ this.IX(x,y) ];
     }
+
 
     getVelocityX(x,y){
         return this.Vx[ this.IX(x,y) ];
@@ -401,11 +513,19 @@ export default class FluidGrid extends Phaser.GameObjects.GameObject {
                 var x = i * this.blockSize;
                 var y = j * this.blockSize;
                 
-                var d = this.density[ this.IX(i,j) ];
-                if(d > 255){
-                    d = 255;
+                var r = this.densityR[ this.IX(i,j) ];
+                if(r > 255){
+                    r = 255;
                 }
-                var color = Phaser.Display.Color.GetColor(d,d,0);
+                var g = this.densityG[ this.IX(i,j) ];
+                if(g > 255){
+                    g = 255;
+                }
+                var b = this.densityB[ this.IX(i,j) ];
+                if(b > 255){
+                    b = 255;
+                }
+                var color = Phaser.Display.Color.GetColor(r,g,b);
                 this.graphics.fillStyle(color);
                 this.graphics.fillRect(x, y, this.blockSize, this.blockSize);
                 
