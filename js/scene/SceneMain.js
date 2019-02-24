@@ -4,9 +4,9 @@ import game from '../main/game.js'
 export default class SceneMain extends Phaser.Scene {
     constructor() {
         super({ key: "SceneMain" });
-        this.blocksize = 4;
+        this.blocksize = 8;
         this.itemTypes = [
-            "red","green","blue","wall"
+            "red","green","blue","addwall", "removewall"
         ];
         this.selectedItem = 0;
     }
