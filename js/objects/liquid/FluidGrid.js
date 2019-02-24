@@ -35,7 +35,7 @@ export default class FluidGrid extends Phaser.GameObjects.GameObject {
         this.Vy0 = new Array(this.gridsize).fill(0);
 
 
-        this.solids = new Array(this.gridsize).fill(1);
+        this.solids = new Array(this.gridsize).fill(false);
 
         this.graphics = this.scene.add.graphics();
 
@@ -94,30 +94,41 @@ export default class FluidGrid extends Phaser.GameObjects.GameObject {
 
     lin_solve(b, x, x0,  a,  c,  iter,  N){
         var cRecip = 1.0 / c;
-        
+        var tmp1 = new Array(this.gridsize).fill(0);
         for (var k = 0; k < iter; k++) {     
             for (var j = 1; j < N - 1; j++) {
                 for (var i = 1; i < N - 1; i++) {
                     var ix = this.IX(i, j);
-                    x[ ix ] = this.calcNeighborVal(ix ,x,x0,a, cRecip, N);                    
+                    tmp1[ ix ] = this.calcNeighborVal(ix ,x,x0,a, cRecip, N);                    
                 }
-            }            
+            }
+            for(var i = 1; i < N*N; i++){
+                x[i] = tmp1[i];
+            }
+            
             this.set_bnd(b, x, N);
         }
     }
     lin_solveRGB(b, x, x0,  a,  c,  iter,  N){
         var cRecip = 1.0 / c;
+        var tmp1 = new Array(this.gridsize).fill(0);
+        var tmp2 = new Array(this.gridsize).fill(0);
+        var tmp3 = new Array(this.gridsize).fill(0);
         for (var k = 0; k < iter; k++) {     
             for (var j = 1; j < N - 1; j++) {
                 for (var i = 1; i < N - 1; i++) {
                     var ix = this.IX(i, j);
-                    x[0][ ix ] = this.calcNeighborVal(ix ,x[0],x0[0],a, cRecip, N); //r
-                    x[1][ ix ] = this.calcNeighborVal(ix ,x[1],x0[1],a, cRecip, N); //g
-                    x[2][ ix ] = this.calcNeighborVal(ix ,x[2],x0[2],a, cRecip, N); //b
+                    tmp1[ ix ] = this.calcNeighborVal(ix ,x[0],x0[0],a, cRecip, N); //r
+                    tmp2[ ix ] = this.calcNeighborVal(ix ,x[1],x0[1],a, cRecip, N); //g
+                    tmp3[ ix ] = this.calcNeighborVal(ix ,x[2],x0[2],a, cRecip, N); //b
 
                 }
             }      
-            
+            for(var i = 1; i < N*N; i++){
+                x[0][i] = tmp1[i];
+                x[1][i] = tmp2[i];
+                x[2][i] = tmp3[i];
+            }
             this.set_bnd(b, x[0], N);
             this.set_bnd(b, x[1], N);
             this.set_bnd(b, x[2], N);
@@ -126,27 +137,38 @@ export default class FluidGrid extends Phaser.GameObjects.GameObject {
     }
     lin_solveVec(b, x, x0, b2, y, y0,  a,  c,  iter,  N){
         var cRecip = 1.0 / c;
+        var tmp1 = new Array(this.gridsize).fill(0);
+        var tmp2 = new Array(this.gridsize).fill(0);
         for (var k = 0; k < iter; k++) {     
             for (var j = 1; j < N - 1; j++) {
                 for (var i = 1; i < N - 1; i++) {
                     var ix = this.IX(i, j);
-                    x[ ix ] = this.calcNeighborVal(ix ,x,x0,a, cRecip, N);     
-                    y[ ix ] = this.calcNeighborVal(ix ,y,y0,a, cRecip, N);                                           
+                    tmp1[ ix ] = this.calcNeighborVal(ix ,x,x0,a, cRecip, N);     
+                    tmp2[ ix ] = this.calcNeighborVal(ix ,y,y0,a, cRecip, N);                                           
                 }
             }            
+            for(var i = 1; i < N*N; i++){
+                x[i] = tmp1[i];
+                y[i] = tmp2[i];
+            }
             this.set_bndVec(b, x, b2, y, N)
         }
     }
 
     calcNeighborVal(ix ,x,x0,a, cRecip, N){
-        return (
-                x0[ix] + a *
-                (   x[ ix + 1 ]  + //+ 1 on x axis
-                    x[ ix - 1 ]  + //-1 on x axis
-                    x[ ix + N]  + /// +1 on y axis
-                    x[ ix - N] // -1 on y axis
-                )
-            ) * cRecip;
+        if(!this.solids[ix]){
+            return (
+                    x0[ix] + a *
+                    (   this.solids[ix+1] ? x[ix] : x[ ix + 1 ]  + //+ 1 on x axis
+                        this.solids[ix-1] ? x[ix] : x[ ix - 1 ]  + //-1 on x axis
+                        this.solids[ix+N] ? x[ix] : x[ ix + N]  + /// +1 on y axis
+                        this.solids[ix-N] ? x[ix] : x[ ix - N] // -1 on y axis
+                    )
+                ) * cRecip;
+        } else {
+            return x[ix];
+        }
+            
     }
 
     project(velocX, velocY, p, div, iter, N)
@@ -156,10 +178,10 @@ export default class FluidGrid extends Phaser.GameObjects.GameObject {
             for (var i = 1; i < N - 1; i++) {
                 var ix = this.IX(i, j);
                 div[ ix ] = -0.5*(
-                            (velocX[ ix + 1] )
-                            -(velocX[ ix -1 ] )
-                            +(velocY[ ix + N ])
-                            -(velocY[ ix - N ] )
+                            (  this.solids[ix+1] ? 0 : velocX[ ix + 1] )
+                            -(  this.solids[ix-1] ? 0 : velocX[ ix -1 ] )
+                            +( this.solids[ix+N] ? 0 : velocY[ ix + N ])
+                            -( this.solids[ix-N] ? 0 : velocY[ ix - N ] )
                 ) * nRecip;
                 p[ ix ] = 0;
             }
@@ -172,8 +194,8 @@ export default class FluidGrid extends Phaser.GameObjects.GameObject {
         for (var j = 1; j < N - 1; j++) {
             for (var i = 1; i < N - 1; i++) {
                 var ix = this.IX(i, j);
-                velocX[ ix ] -= 0.5 * (  p[ ix + 1 ]- p[ ix - 1 ]* this.solids[ix - 1]) * N;
-                velocY[ ix ] -= 0.5 * (  p[ ix + N ]- p[ ix - N ]* this.solids[ix - N]) * N;
+                velocX[ ix ] -= 0.5 * (  p[ ix + 1 ]- p[ ix - 1 ]) * N;
+                velocY[ ix ] -= 0.5 * (  p[ ix + N ]- p[ ix - N ]) * N;
             }
         }
         
@@ -198,6 +220,8 @@ export default class FluidGrid extends Phaser.GameObjects.GameObject {
 
         for(j = 1, jfloat = 1; j < N - 1; j++, jfloat++) { 
             for(i = 1, ifloat = 1; i < N - 1; i++, ifloat++) {
+                var ix = this.IX(i, j);
+                
                 tmp1 = dtx * velocX[this.IX(i, j)];
                 tmp2 = dty * velocY[this.IX(i, j)];
 
@@ -227,16 +251,17 @@ export default class FluidGrid extends Phaser.GameObjects.GameObject {
                 var ix2 = this.IX(i0i, j1i);
                 var ix3 = this.IX(i1i, j0i);
                 var ix4 = this.IX(i1i, j1i);
-
-                d[this.IX(i, j)] = 
+               
                 
-                    s0 * ( t0 * d0[ix1]  +  t1 * d0[ix2]  ) +
-                    s1 * ( t0 * d0[ix3]  +  t1 * d0[ix4] );
+                d[ix] = 
                 
-                e[this.IX(i, j)] = 
+                    s0 * ( t0 *  d0[ix1]  +  t1 * d0[ix2]  ) +
+                    s1 * ( t0 *  d0[ix3]  +  t1 *  d0[ix4] );
                 
-                    s0 * ( t0 * e0[ix1]   +  t1 * e0[ix2]  ) +
-                    s1 * ( t0 * e0[ix3]  +  t1 * e0[ix4] );                    
+                e[ix] = 
+                
+                s0 * ( t0 * e0[ix1]  +  t1 * e0[ix2]  ) +
+                s1 * ( t0 * e0[ix3]  +  t1 *  e0[ix4] );                    
             }
         }
     
@@ -261,6 +286,8 @@ export default class FluidGrid extends Phaser.GameObjects.GameObject {
 
         for(j = 1, jfloat = 1; j < N - 1; j++, jfloat++) { 
             for(i = 1, ifloat = 1; i < N - 1; i++, ifloat++) {
+                var ix = this.IX(i, j);
+                
                 tmp1 = dtx * velocX[this.IX(i, j)];
                 tmp2 = dty * velocY[this.IX(i, j)];
 
@@ -289,7 +316,8 @@ export default class FluidGrid extends Phaser.GameObjects.GameObject {
                 var ix2 = this.IX(i0i, j1i);
                 var ix3 = this.IX(i1i, j0i);
                 var ix4 = this.IX(i1i, j1i);
-                d[this.IX(i, j)] = 
+                
+                d[ix] = 
                 
                     s0 * ( t0 * d0[ix1]  +  t1 * d0[ix2]  ) +
                     s1 * ( t0 * d0[ix3]  +  t1 * d0[ix4] );
@@ -315,6 +343,8 @@ export default class FluidGrid extends Phaser.GameObjects.GameObject {
 
         for(j = 1, jfloat = 1; j < N - 1; j++, jfloat++) { 
             for(i = 1, ifloat = 1; i < N - 1; i++, ifloat++) {
+                var ix = this.IX(i, j);
+                
                 tmp1 = dtx * velocX[this.IX(i, j)];
                 tmp2 = dty * velocY[this.IX(i, j)];
 
@@ -343,12 +373,14 @@ export default class FluidGrid extends Phaser.GameObjects.GameObject {
                 var ix2 = this.IX(i0i, j1i);
                 var ix3 = this.IX(i1i, j0i);
                 var ix4 = this.IX(i1i, j1i);
-                for(var den = 0; den < d.length; den++){
-                    d[den][this.IX(i, j)] = 
                 
-                    s0 * ( t0 * d0[den][ix1] +  t1 * d0[den][ix2] ) +
-                    s1 * ( t0 * d0[den][ix3] +  t1 * d0[den][ix4] );
 
+                for(var den = 0; den < d.length; den++){
+                    
+                    d[den][ix] = 
+                    
+                        s0 * ( t0 * d0[den][ix1]  +  t1 * d0[den][ix2] ) +
+                        s1 * ( t0 * d0[den][ix3]  +  t1 * d0[den][ix4] );
                 }
             }
         }
@@ -433,46 +465,32 @@ export default class FluidGrid extends Phaser.GameObjects.GameObject {
         var ix = this.IX(x,y);
         if(type == "red"){
             this.densityR[ ix ] += amount;
-            this.densityR[ ix + 1 ] += amount;
-            this.densityR[ ix - 1 ] += amount;
-            this.densityR[ ix + this.size ] += amount;
-            this.densityR[ ix - this.size ] += amount;
+            //this.densityR[ ix + 1 ] += amount;
+            //this.densityR[ ix - 1 ] += amount;
+            //this.densityR[ ix + this.size ] += amount;
+            //this.densityR[ ix - this.size ] += amount;
         }
         if(type == "green"){
             this.densityG[ ix ] += amount;
-            this.densityG[ ix + 1 ] += amount;
-            this.densityG[ ix - 1 ] += amount;
-            this.densityG[ ix + this.size ] += amount;
-            this.densityG[ ix - this.size ] += amount;
+            //this.densityG[ ix + 1 ] += amount;
+            //this.densityG[ ix - 1 ] += amount;
+            //this.densityG[ ix + this.size ] += amount;
+            //this.densityG[ ix - this.size ] += amount;
         }
         if(type == "blue"){
             this.densityB[ ix ] += amount;
-            this.densityB[ ix + 1 ] += amount;
-            this.densityB[ ix - 1 ] += amount;
-            this.densityB[ ix + this.size ] += amount;
-            this.densityB[ ix - this.size ] += amount;
+            //this.densityB[ ix + 1 ] += amount;
+            //this.densityB[ ix - 1 ] += amount;
+            //this.densityB[ ix + this.size ] += amount;
+            //this.densityB[ ix - this.size ] += amount;
         }
         if(type == "addwall"){
-            this.solids[ ix ] = 0;
-            this.solids[ ix + 1 ] = 0;
-            this.solids[ ix - 1 ] = 0;
-            this.solids[ ix + this.size ] = 0;
-            this.solids[ ix - this.size ] = 0;
-            this.solids[ ix + 1 + this.size] = 0;
-            this.solids[ ix + 1 - this.size] = 0;
-            this.solids[ ix - 1 + this.size ] = 0;
-            this.solids[ ix - 1 - this.size ] = 0;
+            this.solids[ ix ] = true;
+
         }
         if(type == "removewall"){
-            this.solids[ ix ] = 1;
-            this.solids[ ix + 1 ] = 1;
-            this.solids[ ix - 1 ] = 1;
-            this.solids[ ix + this.size ] = 1;
-            this.solids[ ix - this.size ] = 1;
-            this.solids[ ix + 1 + this.size] = 1;
-            this.solids[ ix + 1 - this.size] = 1;
-            this.solids[ ix - 1 + this.size ] = 1;
-            this.solids[ ix - 1 - this.size ] = 1;
+            this.solids[ ix ] = false;
+
         }
     }
     addDensity(x, y, amount){
@@ -516,7 +534,7 @@ export default class FluidGrid extends Phaser.GameObjects.GameObject {
                 var y = j * this.blockSize;
 
                 var ix = this.IX(i,j);
-                if( this.solids[ ix ] == 0 ){
+                if( this.solids[ ix ] ){
                     var color = Phaser.Display.Color.GetColor(255,255,255);
                     this.graphics.fillStyle(color);
                     this.graphics.fillRect(x, y, this.blockSize, this.blockSize);
@@ -547,8 +565,8 @@ export default class FluidGrid extends Phaser.GameObjects.GameObject {
                 var x = i ;
                 var y = j ;
 
-                var vx = this.Vx[ this.IX(i,j) ];
-                var vy = this.Vy[ this.IX(i,j) ];
+                var vx = this.Vx[ this.IX(i,j) ] * 10;
+                var vy = this.Vy[ this.IX(i,j) ] * 10;
 
                 var r = Math.abs(vx * 100);
                 var b = Math.abs(vy * 100);
@@ -561,9 +579,9 @@ export default class FluidGrid extends Phaser.GameObjects.GameObject {
                 }
                 var color = Phaser.Display.Color.GetColor(r,128,b);
                 this.graphics.lineStyle(2,color,0.5);
-                if(!(Math.abs(vx) < 0.1 && Math.abs(vy) <= 0.5)){
+                //if(!(Math.abs(vx) < 0.1 && Math.abs(vy) <= 0.5)){
                     this.graphics.lineBetween(x* this.blockSize, y* this.blockSize, (x+vx)* this.blockSize,(y+vy)* this.blockSize);
-                } 
+                //} 
                 
             }    
         }
