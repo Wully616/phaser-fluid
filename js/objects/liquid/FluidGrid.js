@@ -1,5 +1,9 @@
 //https://mikeash.com/pyblog/fluid-simulation-for-dummies.html
 //http://www.cs.northwestern.edu/~sco590/cs140/assignment3.html
+//https://github.com/dionyziz/wave-experiment/blob/master/main.coffee
+//http://curran.github.io/HTML5Examples/
+//https://www.thanassis.space/wavePhysics.html
+//http://cowboyprogramming.com/2008/04/01/practical-fluid-mechanics/
 import Vector from '../../util/Vector2D.js'
 export default class FluidGrid extends Phaser.GameObjects.GameObject {
 
@@ -12,9 +16,9 @@ export default class FluidGrid extends Phaser.GameObjects.GameObject {
         this.gridHeight = gridHeight;
         this.blockSize = blockSize;
         //a debug grid
-        this.createDebugGrid(this.scene,this.gridWidth,this.gridHeight,this.blockSize);
+        //this.createDebugGrid(this.scene,this.gridWidth,this.gridHeight,this.blockSize);
         
-        this.iter = 1;
+        this.iter = 20;
         //size of the grid
         this.size = gridWidth/blockSize;
         this.gridsize = this.size*this.size;
@@ -87,14 +91,15 @@ export default class FluidGrid extends Phaser.GameObjects.GameObject {
         //this.diffuseVec(1, Vx0, Vx, 2, Vy0, Vy, visc, dt, this.iter, N );
         this.diffuseArr([Vx0,Vy0 ], [Vx, Vy], visc, dt, this.iter, N );
         this.project(Vx0, Vy0, Vx, Vy, this.iter, N);
-        
+        this.edgeVelocities(Vx,Vy, N);
         this.advectArr([Vx,Vy],[Vx0,Vy0], Vx0, Vy0,  dt, N); 
         this.project(Vx, Vy, Vx0, Vy0, this.iter, N);
-        
+        this.edgeVelocities(Vx,Vy, N);
         //process R G B channels of density
         this.diffuseArr([sR,sG,sB], [densityR,densityG,densityB], diff, dt, this.iter, N);
         this.advectArr([densityR,densityG,densityB], [sR,sG,sB], Vx, Vy, dt, N);
 
+        
   
     }
 
@@ -119,6 +124,8 @@ export default class FluidGrid extends Phaser.GameObjects.GameObject {
             }
 
         }
+       
+
     }
     lin_solveArr(x, x0,  a,  c,  iter,  N){
         var cRecip = 1.0 / c;
@@ -147,6 +154,9 @@ export default class FluidGrid extends Phaser.GameObjects.GameObject {
         var up = i.up;
         var down = i.down;
         if(!this.solids[ix]){
+
+            //create bitshift to see if walls are up down left right,
+            //then do if statements to calculate appropriate diffusion based on           
             return (
                     x0[ix] + a *
                     (   this.solids[right]   ? x[ix] : x[ right ]  + //+ 1 on x axis
@@ -156,7 +166,7 @@ export default class FluidGrid extends Phaser.GameObjects.GameObject {
                     )
                 ) * cRecip;
         } else {
-            return x[ix];
+            return 0; //blocks should not contain densities
         }
             
     }
@@ -196,15 +206,14 @@ export default class FluidGrid extends Phaser.GameObjects.GameObject {
         var s0, s1, t0, t1;
         var  x, y;
         
-        var ifloat, jfloat;
         var i, j;
         var dt0 = dt*N;
         var tleft, t, tnext,  vx, vy;
 
-        for(j = 0, jfloat = 1; j < N; j++, jfloat++) { 
-            for(i = 0, ifloat = 1; i < N; i++, ifloat++) {
+        for(j = 0; j < N; j++) { 
+            for(i = 0; i < N; i++) {
                 var ix = this.IX(i, j);
-                if(this.solids[ix]){continue;}
+                //if(this.solids[ix]){continue;}
 
                 tleft=dt0;
                 x=i;y=j;		
@@ -212,14 +221,12 @@ export default class FluidGrid extends Phaser.GameObjects.GameObject {
                 while(tleft>0.0000001) {
         
                     //enforce boundry contraints
-                    //if (x<0.5) x=0.5; if (x>N+0.5) x=N+0.5; 
-                    //if (y<0.5) y=0.5; if (y>N+0.5) y=N+0.5; 
+                    if (x<0.5) x=0.5; if (x>N+0.5) x=N+0.5; 
+                    if (y<0.5) y=0.5; if (y>N+0.5) y=N+0.5; 
+                    
                     var c = this.checkBounds(x,y);
-                    x = c[0]; y = c[1];
-                
-        
-                    i0=Math.floor(x); i1=i0+1;
-                    j0=Math.floor(y); j1=j0+1;
+                    i0=c[0]; i1=i0+1;
+                    j0=c[1]; j1=j0+1;
                     s1 = x-i0; s0 = 1-s1; t1 = y-j0; t0 = 1-t1;
         
                     vx = -(s0*(t0*u[this.IX(i0,j0)]+t1*u[this.IX(i0,j1)])+
@@ -242,14 +249,12 @@ export default class FluidGrid extends Phaser.GameObjects.GameObject {
                 }
         
         
-                //if (x<0.5) x=0.5; if (x>N+0.5) x=N+0.5; 
-                //if (y<0.5) y=0.5; if (y>N+0.5) y=N+0.5; 
+                if (x<0.5) x=0.5; if (x>N+0.5) x=N+0.5; 
+                if (y<0.5) y=0.5; if (y>N+0.5) y=N+0.5; 
                 var c = this.checkBounds(x,y);
-                x = c[0]; y = c[1];
-                
-        
-                i0=Math.floor(x); i1=i0+1;
-                j0=Math.floor(y); j1=j0+1;
+                i0=c[0]; i1=i0+1;
+                j0=c[1]; j1=j0+1;
+
                 s1 = x-i0; s0 = 1-s1; t1 = y-j0; t0 = 1-t1;
                 for(var ar = 0 ; ar < d.length; ar ++){
                     d[ar][this.IX(i,j)] =   s0*(t0*d0[ar][this.IX(i0,j0)]+t1*d0[ar][this.IX(i0,j1)])+
@@ -312,6 +317,47 @@ export default class FluidGrid extends Phaser.GameObjects.GameObject {
             x[ ix ] = 0.5 * ( x[ this.IX(i-1,j) ]     + x[ this.IX(i,j-1) ]       + x[ ix ]);
         }
     }
+
+    edgeVelocities(x,y, N){
+
+        for(var i = 0; i < N - 1; i++) {
+            for(var j = 0; j < N - 1; j++) {
+                var ix = this.IX(i,j);
+                if(!this.solids[ix]){
+                    //x
+                    //get the direction of force
+                    if(x[ix] < 0 ){ //going left, it came from the right, we need to reflect back to the right so cell > 0
+                        //first check if the cell to the left is a solid or not, we dont want to reflect velocity into another solid
+                        if(this.solids[ix-1]){
+                            x[ix] = -x[ix];
+                        }
+                    }
+
+                    if(x[ix] > 0 ){ //going left, it came from the right, we need to reflect back to the right so cell < 0
+                        //first check if the cell to the left is a solid or not, we dont want to reflect velocity into another solid
+                        if(this.solids[ix+1]){
+                            x[ix] = -x[ix];
+                        } 
+                    }
+                    //y
+                    if(y[ix] < 0 ){ //going up, it came from the bottom, we need to reflect back to the top so cell > 0
+                        
+                        if(this.solids[ix-N]){
+                            y[ix] = -y[ix];
+                        }
+                    }
+
+                    if(y[ix] > 0 ){ //going down, it came from the top, we need to reflect back to down so cell < 0
+                        if(this.solids[ix+N]){
+                            y[ix] = -y[ix];
+                        } 
+                    }                   
+                }
+            }
+        }
+
+    }
+
 
     addItem(x,y,type,amount){
         var ix = this.IXWrap(x,y);
@@ -383,6 +429,8 @@ export default class FluidGrid extends Phaser.GameObjects.GameObject {
 
     }
     checkBounds(x,y){
+        x = Math.floor(x);
+        y = Math.floor(y);
         if(x > this.size-1){
             x = x - this.size; 
         } 
@@ -426,6 +474,7 @@ export default class FluidGrid extends Phaser.GameObjects.GameObject {
                     if(b > 255){
                         b = 255;
                     }
+                    if(r < 10 && b < 10 && g < 10){ continue; }
                     var color = Phaser.Display.Color.GetColor(r,g,b);
                     this.graphics.fillStyle(color);
                     this.graphics.fillRect(x, y, this.blockSize, this.blockSize);
@@ -440,8 +489,8 @@ export default class FluidGrid extends Phaser.GameObjects.GameObject {
                 var x = i ;
                 var y = j ;
 
-                var vx = this.Vx[ this.IX(i,j) ] * 10;
-                var vy = this.Vy[ this.IX(i,j) ] * 10;
+                var vx = this.Vx[ this.IX(i,j) ] ;
+                var vy = this.Vy[ this.IX(i,j) ] ;
 
                 var r = Math.abs(vx * 100);
                 var b = Math.abs(vy * 100);

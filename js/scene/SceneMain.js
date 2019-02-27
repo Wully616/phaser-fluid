@@ -4,7 +4,7 @@ import game from '../main/game.js'
 export default class SceneMain extends Phaser.Scene {
     constructor() {
         super({ key: "SceneMain" });
-        this.blocksize = 8;
+        this.blocksize = 16;
         this.itemTypes = [
             "red","green","blue","addwall", "removewall"
         ];
@@ -17,7 +17,7 @@ export default class SceneMain extends Phaser.Scene {
 
     create(){
         this.text = this.add.text(10, 10, '', { fill: '#ff0000' }).setDepth(1);
-        this.fluid = new FluidGrid(this,0,0,"fluid",game.config.width,game.config.height,this.blocksize,0.000,0.0,0.1);
+        this.fluid = new FluidGrid(this,0,0,"fluid",game.config.width,game.config.height,this.blocksize,0.000,0.0,0.01);
         this.input.mouse.disableContextMenu();
 
         
