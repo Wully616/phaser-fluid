@@ -87,7 +87,7 @@ export default class FluidGrid extends Phaser.GameObjects.GameObject {
         //this.diffuseVec(1, Vx0, Vx, 2, Vy0, Vy, visc, dt, this.iter, N );
         this.diffuseArr([Vx0,Vy0 ], [Vx, Vy], visc, dt, this.iter, N );
         this.project(Vx0, Vy0, Vx, Vy, this.iter, N);
-        
+        this.add_vorocity(N,Vx,Vy,dt);
         this.advectArr([Vx,Vy],[Vx0,Vy0], Vx0, Vy0,  dt, N); 
         this.project(Vx, Vy, Vx0, Vy0, this.iter, N);
         
@@ -196,13 +196,11 @@ export default class FluidGrid extends Phaser.GameObjects.GameObject {
         var s0, s1, t0, t1;
         var  x, y;
         
-        var ifloat, jfloat;
-        var i, j;
         var dt0 = dt*N;
         var tleft, t, tnext,  vx, vy;
 
-        for(j = 0;  j < N; j++) { 
-            for(i = 0; i < N; i++ ) {
+        for(var j = 0;  j < N; j++) { 
+            for(var i = 0; i < N; i++ ) {
                 var ix = this.IX(i, j);
 
                 tleft=dt0;
@@ -256,7 +254,48 @@ export default class FluidGrid extends Phaser.GameObjects.GameObject {
         }
 
     }
-  
+
+     
+    vort(i,j,u,v, N){
+        return ( -0.5*( v[this.IX(i+1,j)]-v[this.IX(i-1,j)] + u[this.IX(i,j-1)]-u[this.IX(i,j+1)] )*N );
+    }
+
+    add_vorocity(N, u, v, dt) {
+        var epsilon=2;
+    //vort is just the curl of the velocity field
+        var fx = this.tmpar[0];
+        var fy = this.tmpar[1];
+    
+        for(var j = 0;  j < N; j++) { 
+            for(var i = 0; i < N; i++ ) {
+            
+    
+            var dvx = 0.5*(this.vort(i+1,j,u,v,N)-this.vort(i-1,j,u,v,N));
+            var dvy = 0.5*(this.vort(i,j+1,u,v,N)-this.vort(i,j-1,u,v,N));
+    
+            var mag = Math.sqrt(dvx*dvx+dvy*dvy);
+    
+            //apply a force equal to epsilon * cross(N,vor)
+            fx[this.IX(i,j)]=mag > 0.00001 ? epsilon*dt*dvy*this.vort(i,j,u,v,N)/(mag*N) : 0;
+            fy[this.IX(i,j)]=mag > 0.00001 ? epsilon*dt*dvx*this.vort(i,j,u,v,N)/(mag*N) : 0;
+            }
+        }
+    
+        //set_bnd ( N, 0, fx ); set_bnd ( N, 0, fy );
+    
+    
+        for(var j = 0;  j < N; j++) { 
+            for(var i = 0; i < N; i++ ) {
+
+            if(u[this.IX(i,j)]) u[this.IX(i,j)]+=fx[this.IX(i,j)];
+            if(v[this.IX(i,j)]) v[this.IX(i,j)]-=fy[this.IX(i,j)];
+            }
+        }
+    
+        //set_bnd ( N, 1, u ); set_bnd ( N, 2, v );
+    
+    
+    }
 
     addItem(x,y,type,amount){
         var ix = this.IXWrap(x,y);
