@@ -85,9 +85,12 @@ export default class FluidGrid extends Phaser.GameObjects.GameObject {
         var densityB = this.densityB;
             
         //this.diffuseVec(1, Vx0, Vx, 2, Vy0, Vy, visc, dt, this.iter, N );
+        this.add_vorocity(Vx, Vy, Vx0,Vy0,dt,N);
+
         this.diffuseArr([Vx0,Vy0 ], [Vx, Vy], visc, dt, this.iter, N );
         this.project(Vx0, Vy0, Vx, Vy, this.iter, N);
-        this.add_vorocity(N,Vx,Vy,dt);
+        
+        //this.add_pressure(Vx0,Vy0,densityR,dt,N);
         this.advectArr([Vx,Vy],[Vx0,Vy0], Vx0, Vy0,  dt, N); 
         this.project(Vx, Vy, Vx0, Vy0, this.iter, N);
         
@@ -255,46 +258,81 @@ export default class FluidGrid extends Phaser.GameObjects.GameObject {
 
     }
 
-     
-    vort(i,j,u,v, N){
-        return ( -0.5*( v[this.IX(i+1,j)]-v[this.IX(i-1,j)] + u[this.IX(i,j-1)]-u[this.IX(i,j+1)] )*N );
+    
+    curl(i, j, u ,v , N) {    
+        var du_dy = (u[ this.IX(i,j+1) ] - u[ this.IX(i,j-1) ]) * 0.5;
+        var dv_dx = (v[ this.IX(i+1,j) ] - v[ this.IX(i-1,j) ]) * 0.5;
+        return du_dy - dv_dx;
     }
 
-    add_vorocity(N, u, v, dt) {
+    vort(i,j,u,v, N){
+        return ( -0.5* ( v[this.IX(i+1,j)] - v[this.IX(i-1,j)] + u[this.IX(i,j-1)]-u[this.IX(i,j+1)] )*N );
+    }
+
+    add_vorocity(u, v, u0, v0, dt,N) {
         var epsilon=2;
     //vort is just the curl of the velocity field
-        var fx = this.tmpar[0];
-        var fy = this.tmpar[1];
-    
+        
+        var curl = this.tmpar[1];
+        var c;
         for(var j = 0;  j < N; j++) { 
-            for(var i = 0; i < N; i++ ) {
-            
-    
-            var dvx = 0.5*(this.vort(i+1,j,u,v,N)-this.vort(i-1,j,u,v,N));
-            var dvy = 0.5*(this.vort(i,j+1,u,v,N)-this.vort(i,j-1,u,v,N));
-    
-            var mag = Math.sqrt(dvx*dvx+dvy*dvy);
-    
-            //apply a force equal to epsilon * cross(N,vor)
-            fx[this.IX(i,j)]=mag > 0.00001 ? epsilon*dt*dvy*this.vort(i,j,u,v,N)/(mag*N) : 0;
-            fy[this.IX(i,j)]=mag > 0.00001 ? epsilon*dt*dvx*this.vort(i,j,u,v,N)/(mag*N) : 0;
+            for(var i = 0; i < N; i++ ) { 
+                c = this.curl(i, j, u , v , N);
+                curl[this.IX(i,j)] = c > 0 ? c : -c;
             }
         }
-    
-        //set_bnd ( N, 0, fx ); set_bnd ( N, 0, fy );
-    
-    
+
         for(var j = 0;  j < N; j++) { 
             for(var i = 0; i < N; i++ ) {
 
-            if(u[this.IX(i,j)]) u[this.IX(i,j)]+=fx[this.IX(i,j)];
-            if(v[this.IX(i,j)]) v[this.IX(i,j)]-=fy[this.IX(i,j)];
+            
+                //console.log("forcex: " + forceX + ", forcey: " + forceY);
+                var dvx = 0.5 * ( curl[this.IX(i+1,j)] - curl[this.IX(i-1,j)] );
+                var dvy = 0.5 * ( curl[this.IX(i,j+1)] - curl[this.IX(i,j-1)] );
+                    
+                var length = 1 / ( Math.sqrt(dvx * dvx + dvy * dvy) + 0.000001);
+
+                dvx *= length * N;
+                dvy *= length * N;
+        
+                //apply a force equal to epsilon * cross(N,vor)
+                u0[this.IX(i,j)] = epsilon * dt * dvy * curl[this.IX(i,j)];
+                v0[this.IX(i,j)] = epsilon * dt * dvx * -curl[this.IX(i,j)];
+                
             }
         }
-    
-        //set_bnd ( N, 1, u ); set_bnd ( N, 2, v );
-    
-    
+    }
+
+    add_pressure( u, v, heat, dt,N) {
+        var pressure = 0.000001;
+        //vort is just the curl of the velocity field
+        var fx = this.tmpar[0];
+        var fy = this.tmpar[1];
+
+        for(var j = 0;  j < N; j++) { 
+            for(var i = 0; i < N; i++ ) {
+
+                //pressure
+                var forceX =  heat[this.IX(i,j)] - heat[this.IX(i+1,j)];
+                var forceY =  heat[this.IX(i,j)] - heat[this.IX(i,j+1)];
+
+                fx[this.IX(i,j)] += (forceX * pressure);
+                fx[this.IX(i+1,j)] += (forceX * pressure);
+
+                fy[this.IX(i,j)] += (forceY * pressure);
+                fy[this.IX(i,j+1)] += (forceY * pressure);
+
+                
+            }
+        }
+      
+        for(var j = 0;  j < N; j++) { 
+            for(var i = 0; i < N; i++ ) {
+                
+                u[this.IX(i,j)]+=fx[this.IX(i,j)]; //add or set directly?               
+                v[this.IX(i,j)]+=fy[this.IX(i,j)];
+            }
+        }
     }
 
     addItem(x,y,type,amount){
